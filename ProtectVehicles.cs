@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.0.3")]
+[Info("Protect Vehicles", "&anhe", "1.0.4")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -46,7 +46,7 @@ public class ProtectVehicles : RustPlugin
         public ulong teamId;
     }
 
-    private Dictionary<ulong, VehicleData> vehiclesDict = new();
+    private Dictionary<ulong, HashSet<ulong>> vehiclesDict = new();
 
     private void Init() =>
         LoadData();
@@ -63,13 +63,42 @@ public class ProtectVehicles : RustPlugin
         {
             vehiclesDict =
                 Interface.Oxide.DataFileSystem
-                    .ReadObject<Dictionary<ulong, VehicleData>>(Name);
+                    .ReadObject<Dictionary<ulong, HashSet<ulong>>>(Name);
 
             vehiclesDict ??= new();
         }
         catch
         {
             vehiclesDict = new();
+
+            // Migrate old data format: vehicleId -> { userId, teamId }
+            try
+            {
+                var oldVehiclesDict =
+                    Interface.Oxide.DataFileSystem
+                        .ReadObject<Dictionary<ulong, VehicleData>>(Name);
+
+                if (oldVehiclesDict == null)
+                    return;
+
+                foreach (var entry in oldVehiclesDict)
+                {
+                    var userIds = new HashSet<ulong>();
+
+                    if (entry.Value.userId != 0)
+                        userIds.Add(entry.Value.userId);
+
+                    var team = RelationshipManager.ServerInstance.FindTeam(entry.Value.teamId);
+                    if (team != null)
+                        foreach (ulong memberId in team.members)
+                            userIds.Add(memberId);
+
+                    vehiclesDict[entry.Key] = userIds;
+                }
+
+                SaveData();
+            }
+            catch { }
         }
     }
 
@@ -80,6 +109,21 @@ public class ProtectVehicles : RustPlugin
     #endregion
 
     // Auth
+
+    private HashSet<ulong> GetPlayerAndTeamIds(BasePlayer player)
+    {
+        var userIds = new HashSet<ulong>
+        {
+            player.userID
+        };
+
+        var team = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
+        if (team != null)
+            foreach (ulong memberId in team.members)
+                userIds.Add(memberId);
+
+        return userIds;
+    }
 
     private object getAuthorisation(BasePlayer player, ulong vehicleId)
     {
@@ -93,36 +137,32 @@ public class ProtectVehicles : RustPlugin
         )
             return null;
 
-        ulong teamId = player.currentTeam;
+        HashSet<ulong> playerAndTeamIds = GetPlayerAndTeamIds(player);
 
-        if (vehiclesDict.TryGetValue(vehicleId, out var savedData))
+        if (vehiclesDict.TryGetValue(vehicleId, out var authorisedUserIds))
         {
-            bool allowed =
-                // Yours
-                savedData.userId == userId ||
-                // Team
-                RelationshipManager.ServerInstance.FindTeam(savedData.teamId)?.members.Contains(userId) == true;
+            bool allowed = false;
 
-            if (allowed)
+            foreach (ulong authorisedUserId in authorisedUserIds)
             {
-                // Refresh owner/team record
-                vehiclesDict[vehicleId] = new VehicleData
+                if (playerAndTeamIds.Contains(authorisedUserId))
                 {
-                    userId = userId,
-                    teamId = teamId
-                };
-
-                return null;
+                    allowed = true;
+                    break;
+                }
             }
 
-            return false;
+            if (!allowed)
+                return false;
+
+            // Refresh authorised users with yourself and your current team.
+            foreach (ulong playerAndTeamId in playerAndTeamIds)
+                authorisedUserIds.Add(playerAndTeamId);
+
+            return null;
         }
 
-        vehiclesDict[vehicleId] = new VehicleData
-        {
-            userId = userId,
-            teamId = teamId
-        };
+        vehiclesDict[vehicleId] = playerAndTeamIds;
 
         return null;
     }
