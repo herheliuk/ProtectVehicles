@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.0.4")]
+[Info("Protect Vehicles", "&anhe", "1.0.5")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -36,6 +36,20 @@ public class ProtectVehicles : RustPlugin
         return entity;
     }
 
+    private HashSet<ulong> GetPlayerAndTeamIds(BasePlayer player)
+    {
+        var userIds = new HashSet<ulong>
+        {
+            player.userID
+        };
+
+        if (player.Team is { } team)
+            foreach (ulong memberId in team.members)
+                userIds.Add(memberId);
+
+        return userIds;
+    }
+
     #endregion
 
     #region Data
@@ -63,42 +77,12 @@ public class ProtectVehicles : RustPlugin
         {
             vehiclesDict =
                 Interface.Oxide.DataFileSystem
-                    .ReadObject<Dictionary<ulong, HashSet<ulong>>>(Name);
-
-            vehiclesDict ??= new();
+                    .ReadObject<Dictionary<ulong, HashSet<ulong>>>(Name)
+                ?? new();
         }
         catch
         {
             vehiclesDict = new();
-
-            // Migrate old data format: vehicleId -> { userId, teamId }
-            try
-            {
-                var oldVehiclesDict =
-                    Interface.Oxide.DataFileSystem
-                        .ReadObject<Dictionary<ulong, VehicleData>>(Name);
-
-                if (oldVehiclesDict == null)
-                    return;
-
-                foreach (var entry in oldVehiclesDict)
-                {
-                    var userIds = new HashSet<ulong>();
-
-                    if (entry.Value.userId != 0)
-                        userIds.Add(entry.Value.userId);
-
-                    var team = RelationshipManager.ServerInstance.FindTeam(entry.Value.teamId);
-                    if (team != null)
-                        foreach (ulong memberId in team.members)
-                            userIds.Add(memberId);
-
-                    vehiclesDict[entry.Key] = userIds;
-                }
-
-                SaveData();
-            }
-            catch { }
         }
     }
 
@@ -109,21 +93,6 @@ public class ProtectVehicles : RustPlugin
     #endregion
 
     // Auth
-
-    private HashSet<ulong> GetPlayerAndTeamIds(BasePlayer player)
-    {
-        var userIds = new HashSet<ulong>
-        {
-            player.userID
-        };
-
-        var team = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
-        if (team != null)
-            foreach (ulong memberId in team.members)
-                userIds.Add(memberId);
-
-        return userIds;
-    }
 
     private object getAuthorisation(BasePlayer player, ulong vehicleId)
     {
@@ -141,25 +110,18 @@ public class ProtectVehicles : RustPlugin
 
         if (vehiclesDict.TryGetValue(vehicleId, out var authorisedUserIds))
         {
-            bool allowed = false;
-
             foreach (ulong authorisedUserId in authorisedUserIds)
             {
                 if (playerAndTeamIds.Contains(authorisedUserId))
                 {
-                    allowed = true;
-                    break;
+                    foreach (ulong playerAndTeamId in playerAndTeamIds)
+                        authorisedUserIds.Add(playerAndTeamId);
+
+                    return null;
                 }
             }
 
-            if (!allowed)
-                return false;
-
-            // Refresh authorised users with yourself and your current team.
-            foreach (ulong playerAndTeamId in playerAndTeamIds)
-                authorisedUserIds.Add(playerAndTeamId);
-
-            return null;
+            return false;
         }
 
         vehiclesDict[vehicleId] = playerAndTeamIds;
@@ -167,7 +129,7 @@ public class ProtectVehicles : RustPlugin
         return null;
     }
 
-    #region Aliases
+    #region Hooks
 
     private object CanAccess(BasePlayer player, BaseEntity entity)
     {
@@ -183,13 +145,17 @@ public class ProtectVehicles : RustPlugin
 
     private object CanMove(BasePlayer player, BaseEntity entity)
     {
-        if (player.GetBuildingPrivilege()?.IsAuthed(player) == true)
+        if (player.IsBuildingAuthed())
             return null;
 
         ulong vehicleId = GetRootEntity(entity).net.ID.Value;
 
         return getAuthorisation(player, vehicleId);
     }
+
+    #endregion
+
+    #region Aliases
 
     // Mount
 
