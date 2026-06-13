@@ -1,4 +1,5 @@
 using Oxide.Core;
+using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
