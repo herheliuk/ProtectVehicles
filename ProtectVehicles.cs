@@ -1,3 +1,5 @@
+using Oxide.Core;
+
 namespace Oxide.Plugins;
 
 [Info("Protect Vehicles", "&anhe", "1.0.1")]
@@ -83,12 +85,8 @@ public class ProtectVehicles : RustPlugin
         ulong userId = player.userID;
         ulong teamId = player.currentTeam;
 
-        player.ChatMessage($"team: {teamId}");
-
         if (vehiclesDict.TryGetValue(vehicleId, out var savedData))
         {
-            player.ChatMessage($"record exists");
-
             bool allowed =
                 // Yours
                 savedData.userId == userId ||
@@ -109,8 +107,6 @@ public class ProtectVehicles : RustPlugin
 
             return false;
         }
-
-        player.ChatMessage($"record added");
 
         vehiclesDict[vehicleId] = new VehicleData
         {
