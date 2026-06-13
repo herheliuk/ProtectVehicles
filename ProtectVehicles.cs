@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.0.2")]
+[Info("Protect Vehicles", "&anhe", "1.0.3")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -83,10 +83,16 @@ public class ProtectVehicles : RustPlugin
 
     private object getAuthorisation(BasePlayer player, ulong vehicleId)
     {
-        if (player.IsAdmin)
+        ulong userId = player.userID;
+
+        if (
+            // Admin
+            player.IsAdmin ||
+            // NPCs
+            userId < 76561197960265728
+        )
             return null;
 
-        ulong userId = player.userID;
         ulong teamId = player.currentTeam;
 
         if (vehiclesDict.TryGetValue(vehicleId, out var savedData))
