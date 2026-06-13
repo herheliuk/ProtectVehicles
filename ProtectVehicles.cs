@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.1.0")]
+[Info("Protect Vehicles", "&anhe", "1.1.1")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -87,8 +87,10 @@ public class ProtectVehicles : RustPlugin
     private void Unload() =>
         SaveData();
 
-    private void OnServerSave() =>
+    private void OnServerSave() {
+        CleanUpVehiclesDict();
         SaveData();
+    }
 
     private void LoadData()
     {
@@ -144,6 +146,22 @@ public class ProtectVehicles : RustPlugin
         vehiclesDict[vehicleId] = playerAndTeamIds;
 
         return null;
+    }
+
+    private void CleanUpVehiclesDict()
+    {
+        var vehiclesToRemove = new List<ulong>();
+
+        foreach (var vehicleId in vehiclesDict.Keys)
+        {
+            var entity = BaseNetworkable.serverEntities.Find(new NetworkableId(vehicleId)) as BaseEntity;
+
+            if (entity == null || entity.IsDestroyed)
+                vehiclesToRemove.Add(vehicleId);
+        }
+
+        foreach (var vehicleId in vehiclesToRemove)
+            vehiclesDict.Remove(vehicleId);
     }
 
     #region Hooks
