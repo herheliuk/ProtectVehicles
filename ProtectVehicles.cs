@@ -1,6 +1,6 @@
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.0.0")]
+[Info("Protect Vehicles", "&anhe", "1.0.1")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -37,7 +37,42 @@ public class ProtectVehicles : RustPlugin
 
     #region Data
 
-    private Dictionary<ulong, Tuple<ulong, ulong>> vehiclesDict = new();
+    private class VehicleData
+    {
+        public ulong userId;
+        public ulong teamId;
+    }
+
+    private Dictionary<ulong, VehicleData> vehiclesDict = new();
+
+    private void Init() =>
+        LoadData();
+
+    private void Unload() =>
+        SaveData();
+
+    private void OnServerSave() =>
+        SaveData();
+
+    private void LoadData()
+    {
+        try
+        {
+            vehiclesDict =
+                Interface.Oxide.DataFileSystem
+                    .ReadObject<Dictionary<ulong, VehicleData>>(Name);
+
+            vehiclesDict ??= new();
+        }
+        catch
+        {
+            vehiclesDict = new();
+        }
+    }
+
+    private void SaveData() =>
+        Interface.Oxide.DataFileSystem
+            .WriteObject(Name, vehiclesDict);
 
     #endregion
 
@@ -54,18 +89,35 @@ public class ProtectVehicles : RustPlugin
         {
             player.ChatMessage($"record exists");
 
-            return (
+            bool allowed =
                 // Yours
-                savedData.Item1 == userId ||
+                savedData.userId == userId ||
                 // Team
-                RelationshipManager.ServerInstance.FindTeam(savedData.Item2)?.members.Contains(userId) == true
-            )
-                ? null : false;
+                RelationshipManager.ServerInstance.FindTeam(savedData.teamId)?.members.Contains(userId) == true;
+
+            if (allowed)
+            {
+                // Refresh owner/team record
+                vehiclesDict[vehicleId] = new VehicleData
+                {
+                    userId = userId,
+                    teamId = teamId
+                };
+
+                return null;
+            }
+
+            return false;
         }
 
         player.ChatMessage($"record added");
 
-        vehiclesDict[vehicleId] = Tuple.Create(userId, teamId);
+        vehiclesDict[vehicleId] = new VehicleData
+        {
+            userId = userId,
+            teamId = teamId
+        };
+
         return null;
     }
 
