@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.0.5")]
+[Info("Protect Vehicles", "&anhe", "1.1.0")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -36,7 +36,7 @@ public class ProtectVehicles : RustPlugin
         return entity;
     }
 
-    private HashSet<ulong> GetPlayerAndTeamIds(BasePlayer player)
+    private HashSet<ulong> GetPlayerOrTeamIds(BasePlayer player)
     {
         var userIds = new HashSet<ulong>
         {
@@ -48,6 +48,25 @@ public class ProtectVehicles : RustPlugin
                 userIds.Add(memberId);
 
         return userIds;
+    }
+
+    private bool AnyUsersOnline(HashSet<ulong> authorisedUserIds)
+    {
+        foreach (BasePlayer activePlayer in BasePlayer.activePlayerList)
+            if (authorisedUserIds.Contains(activePlayer.userID))
+                return true;
+
+        return false;
+    }
+
+    private bool IsEntityUnderAnyUserIdsTCs(BaseEntity vehicle, HashSet<ulong> authorisedUserIds)
+    {
+        if (vehicle.GetBuildingPrivilege() is { } buildingPrivilege)
+            foreach (ulong authorisedPlayer in buildingPrivilege.authorizedPlayers)
+                if (authorisedUserIds.Contains(authorisedPlayer))
+                    return true;
+            
+        return false;
     }
 
     #endregion
@@ -92,21 +111,13 @@ public class ProtectVehicles : RustPlugin
 
     #endregion
 
-    // Auth
-
-    private object getAuthorisation(BasePlayer player, ulong vehicleId)
+    private object IsVehicleAuthorised(BasePlayer player, BaseEntity vehicle)
     {
-        ulong userId = player.userID;
-
-        if (
-            // Admin
-            player.IsAdmin ||
-            // NPCs
-            userId < 76561197960265728
-        )
+        if (player.IsAdmin || player.IsNpc)
             return null;
 
-        HashSet<ulong> playerAndTeamIds = GetPlayerAndTeamIds(player);
+        HashSet<ulong> playerAndTeamIds = GetPlayerOrTeamIds(player);
+        ulong vehicleId = vehicle.net.ID.Value;
 
         if (vehiclesDict.TryGetValue(vehicleId, out var authorisedUserIds))
         {
@@ -121,7 +132,13 @@ public class ProtectVehicles : RustPlugin
                 }
             }
 
-            return false;
+            if (
+                AnyUsersOnline(authorisedUserIds) ||
+                IsEntityUnderAnyUserIdsTCs(vehicle, authorisedUserIds)
+            )
+                return false;
+            
+            vehiclesDict.Remove(vehicleId);
         }
 
         vehiclesDict[vehicleId] = playerAndTeamIds;
@@ -137,10 +154,8 @@ public class ProtectVehicles : RustPlugin
 
         if (generalPurposeVehicles.Contains(vehicle.ShortPrefabName))
             return null;
-        
-        ulong vehicleId = vehicle.net.ID.Value;
 
-        return getAuthorisation(player, vehicleId);
+        return IsVehicleAuthorised(player, vehicle);
     }
 
     private object CanMove(BasePlayer player, BaseEntity entity)
@@ -148,9 +163,9 @@ public class ProtectVehicles : RustPlugin
         if (player.IsBuildingAuthed())
             return null;
 
-        ulong vehicleId = GetRootEntity(entity).net.ID.Value;
+        var vehicle = GetRootEntity(entity);
 
-        return getAuthorisation(player, vehicleId);
+        return IsVehicleAuthorised(player, vehicle);
     }
 
     #endregion
