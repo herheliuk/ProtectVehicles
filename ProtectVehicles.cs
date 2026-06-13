@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.1.1")]
+[Info("Protect Vehicles", "&anhe", "1.1.2")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -140,7 +140,7 @@ public class ProtectVehicles : RustPlugin
             )
                 return false;
             
-            vehiclesDict.Remove(vehicleId);
+            //vehiclesDict.Remove(vehicleId);
         }
 
         vehiclesDict[vehicleId] = playerAndTeamIds;
