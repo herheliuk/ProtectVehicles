@@ -58,7 +58,7 @@ public class ProtectVehicles : RustPlugin
                 return true;
 
         // If not return false, unless the server was recently restared.
-        return UnityEngine.Time.realtimeSinceStartup < 420f; // 7 min ago
+        return UnityEngine.Time.realtimeSinceStartup < 1800f; // 30 min ago
     }
 
     private bool IsEntityUnderAnyUserIdsTCs(BaseEntity vehicle, HashSet<ulong> authorisedUserIds)
