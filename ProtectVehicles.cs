@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.1.2")]
+[Info("Protect Vehicles", "&anhe", "1.1.3")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -52,11 +52,13 @@ public class ProtectVehicles : RustPlugin
 
     private bool AnyUsersOnline(HashSet<ulong> authorisedUserIds)
     {
+        // Any users online
         foreach (BasePlayer activePlayer in BasePlayer.activePlayerList)
             if (authorisedUserIds.Contains(activePlayer.userID))
                 return true;
 
-        return false;
+        // If not return false, unless the server was recently restared.
+        return UnityEngine.Time.realtimeSinceStartup < 420f; // 7 min ago
     }
 
     private bool IsEntityUnderAnyUserIdsTCs(BaseEntity vehicle, HashSet<ulong> authorisedUserIds)
