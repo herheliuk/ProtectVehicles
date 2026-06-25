@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins;
 
-[Info("Protect Vehicles", "&anhe", "1.1.3")]
+[Info("Protect Vehicles", "&anhe", "1.1.4")]
 [Description("Protects vehicles from other players.")]
 public class ProtectVehicles : RustPlugin
 {
@@ -217,14 +217,17 @@ public class ProtectVehicles : RustPlugin
     
     // Damage
 
-    private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info) =>
+    private object OnEntityTakeDamage(BaseCombatEntity target, HitInfo info) =>
         (
             // Vehicle
-            entity.PrefabName.StartsWith("assets/content/vehicles/") &&
+            target.PrefabName.StartsWith("assets/content/vehicles/") &&
             // Damaged by player
-            info.InitiatorPlayer is BasePlayer player
+            (
+                info.InitiatorPlayer ??
+                BasePlayer.FindByID(info.Initiator?.OwnerID ?? 0)
+            ) is BasePlayer attacker
         )
-            ? CanAccess(player, entity) : null;
+            ? CanAccess(attacker, target) : null;
 
     #endregion
 }
